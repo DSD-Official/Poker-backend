@@ -1,3 +1,5 @@
+import { Socket } from "socket.io";
+
 export enum PlayerAction {
   NONE,
   CHECK,
@@ -10,5 +12,6 @@ export enum PlayerAction {
 export interface IPlayer {
   address: string,
   stack: number,
-  status: PlayerAction,
+  status?: PlayerAction,
+  socket: Socket;
 }

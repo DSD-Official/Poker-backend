@@ -4,9 +4,10 @@
     "target": "ES2019",
     "module": "commonjs",
     "outDir": "dist",
-    "baseUrl": "src",
+    "baseUrl": "./src",
     "esModuleInterop": true
   },
+  "baseUrl": "/src",
   "include": [
     "src",
   ],

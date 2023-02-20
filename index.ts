@@ -4,15 +4,16 @@ import express from 'express';
 import path from "path";
 import cors from 'cors';
 import fs from 'fs';
-import Poker from "./src/services/pokerService";
+import "dotenv/config";
 
-const port: number = 8000
+import PokerService from "./src/services/pokerService";
+import { connectDatabase } from "./src/configs/db";
 
 class App {
   private server: http.Server;
   private port: number;
   private io: SocketIO.Server;
-  private pokerGame!: Poker;
+  private pokerService!: PokerService;
 
   constructor(port: number) {
     this.port = port;
@@ -36,15 +37,22 @@ class App {
       }
     });
 
-    this.run();
+    connectDatabase()
+      .then(() => {
+        this.run();
+      })
   }
 
   public run() {
     this.server.listen(this.port);
     console.log(`Server listening on port ${this.port}`);
 
-    this.pokerGame = new Poker(this.io);
+    this.pokerService = new PokerService(this.io);
+    this.test();
+  }
+
+  test() {
   }
 }
 
-new App(port);
+new App(Number(process.env.PORT));
