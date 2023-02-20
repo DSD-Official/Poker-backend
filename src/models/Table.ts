@@ -1,4 +1,5 @@
 import { IPlayer, PlayerAction } from "./Player";
+import { COOLDOWN } from "../helpers/constants";
 
 export enum Round {
   PREFLOP,
@@ -36,5 +37,8 @@ export class Table {
 
   takeSeat(player: IPlayer, position: number) {
     this.players[position] = player;
+  }
+
+  newHand() {
   }
 }
