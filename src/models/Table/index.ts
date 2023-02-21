@@ -71,11 +71,11 @@ export class Table {
     this.stake(this.smallBlind);
     this.moveTurn();
     // big blind
-    this.players[this.currentPlayerId].status = PlayerAction.BIG_BLIND;
-    this.stake(this.bigBlind);
-    this.moveTurn();
-
-    setTimeout(this.timeOut, COUNT_DOWN * 1000);
+    setTimeout(() => {
+      this.players[this.currentPlayerId].status = PlayerAction.BIG_BLIND;
+      this.stake(this.bigBlind);
+      this.moveTurn();
+    }, ANIMATION_TIME);
   }
 
   moveTurn() { // get next turn id
