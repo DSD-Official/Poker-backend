@@ -14,29 +14,59 @@ export default class PokerService {
     this.io = io;
     this.buildConnection();
 
+    this.makeSomeTables();
     logger.info("Poker game service started");
+  }
+
+  makeSomeTables() {
+    this.tables.push(new Table(
+      1,
+      "Poker NL I",
+      "NL Texas Hold'em",
+      1,
+      2
+    ));
+    this.tables.push(new Table(
+      2,
+      "Poker NL II",
+      "NL Texas Hold'em",
+      5,
+      10
+    ));
+    this.tables.push(new Table(
+      3,
+      "Poker NL III",
+      "NL Texas Hold'em",
+      10,
+      20
+    ));
   }
 
   buildConnection = () => {
     this.io.on("connection", (socket: Socket) => {
-      this.sendMessage(socket, "hello");
+      this.sendMessage(socket, "ping");
 
-      socket.on("hello", (data) => this.newConnection(socket, data));
-      socket.on("getAllTables", () => this.sendTablesDetail(socket));
+      socket.on("pong", (data) => this.newConnection(socket, data));
+      socket.on("lobbyInfo", () => this.sendTablesDetail(socket));
       socket.on("createTable", (data) => this.createTable(socket, data));
       socket.on("takeSeat", (data) => this.takeSeat(socket, data));
-      socket.on("watchTable", (data) => this.watchTable(socket, data));
+      // socket.on("watchTable", (data) => this.watchTable(socket, data));
       socket.on("leaveTable", (data) => this.leaveTable(socket, data));
       socket.on("fold", (data) => this.fold(socket, data));
       socket.on("call", (data) => this.call(socket, data));
       socket.on("raise", (data) => this.raise(socket, data));
       socket.on("check", (data) => this.check(socket, data));
       socket.on("allIn", (data) => this.allIn(socket, data));
+      // socket.on("disconnect", (data) => logger.info("disconnected"));
     });
   }
 
   newConnection = async (socket: Socket, { address }: { address: string }) => {
     console.log("connection from", address);
+    if (!address) {
+      this.sendMessage(socket, "error", "connect your wallet");
+      return;
+    }
 
     const user = await userService.getUser(address);
     this.users[address] = user;
@@ -99,8 +129,8 @@ export default class PokerService {
     table.takeSeat({
       address: address,
       stack: startChipAmount,
-      socket: socket,
       betAmount: 0,
+      status: "FOLD",
     }, data.position);
   }
 
@@ -108,6 +138,8 @@ export default class PokerService {
   }
 
   sendTablesDetail = (socket: Socket) => {
+    let data = this.tables.map(table => table.infoForLobby());
+    this.sendMessage(socket, "lobbyInfo", data);
   }
 
   // table actions

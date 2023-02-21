@@ -1,10 +1,14 @@
-import { IPlayer, PlayerAction } from "../Player";
+import { Socket } from "socket.io";
+import { IPlayer } from "../Player";
 import {
   shuffledCards,
-  getNextPlayerId,
+  nextPlayerId,
   isValid,
   COUNT_DOWN,
   ANIMATION_TIME,
+  ROUND_DELAY_TIME,
+  numberOfPlayers,
+  playersInfo,
 } from "./utils";
 
 export enum Round {
@@ -57,39 +61,46 @@ export class Table {
       }
     }
     this.round = Round.PREFLOP;
-    this.dealerId = getNextPlayerId(this.dealerId, this.players);
+    this.dealerId = nextPlayerId(this.dealerId, this.players);
     this.countdown = COUNT_DOWN;
     for (let i = 0; i < 6; i++) {
       if (isValid(this.players[i])) {
-        this.players[i].status = PlayerAction.NONE;
+        this.players[i].status = "NONE";
       }
     }
     this.currentPlayerId = this.dealerId;
     this.countdown = COUNT_DOWN;
     // small blind
-    this.players[this.currentPlayerId].status = PlayerAction.SMALL_BLIND;
+    this.players[this.currentPlayerId].status = "SMALL_BLIND";
     this.stake(this.smallBlind);
     this.moveTurn();
     // big blind
     setTimeout(() => {
-      this.players[this.currentPlayerId].status = PlayerAction.BIG_BLIND;
+      this.players[this.currentPlayerId].status = "BIG_BLIND";
       this.stake(this.bigBlind);
       this.moveTurn();
     }, ANIMATION_TIME);
   }
 
   moveTurn() { // get next turn id
-    this.currentPlayerId = getNextPlayerId(this.currentPlayerId, this.players);
+    this.status = String(this.players[this.currentPlayerId].status);
+    this.currentPlayerId = nextPlayerId(this.currentPlayerId, this.players);
+    this.countdown = COUNT_DOWN;
     let isRoundCompleted: boolean = true;
     for (let i = 0; i < 6; i++) {
       if (isValid(this.players[i])) {
-        if (this.players[i].status != PlayerAction.CALL && this.players[i].status != PlayerAction.CHECK)
+        if (this.players[i].status != "CALL" && this.players[i].status != "CHECK")
           isRoundCompleted = false;
       }
     }
     if (isRoundCompleted) {
       this.round = (this.round + 1) % 5;
-    } else {
+      for (let i = 0; i < 6; i++) {
+        if (isValid(this.players[i])) {
+        }
+      }
+      setTimeout(() => {
+      }, ROUND_DELAY_TIME);
     }
   }
 
@@ -98,50 +109,69 @@ export class Table {
     amount = Math.min(amount, player.stack);
     player.stack -= amount;
     player.betAmount += amount;
-    if (!player.stack) player.status = PlayerAction.ALLIN;
+    if (!player.stack) player.status = "ALLIN";
   }
 
   call() {
     let player = this.players[this.currentPlayerId];
-    player.status = PlayerAction.CALL;
+    player.status = "CALL";
     this.stake(this.currentBetAmount - player.betAmount);
     this.moveTurn();
   }
 
   fold() {
     let player = this.players[this.currentPlayerId];
-    player.status = PlayerAction.FOLD;
+    player.status = "FOLD";
     this.moveTurn();
   }
 
   check() {
     let player = this.players[this.currentPlayerId];
-    player.status = PlayerAction.CHECK;
+    player.status = "CHECK";
     this.moveTurn();
   }
 
   allIn() {
     let player = this.players[this.currentPlayerId];
-    player.status = PlayerAction.ALLIN;
+    player.status = "ALLIN";
     this.stake(player.stack - player.betAmount);
     this.moveTurn();
   }
 
   raise(amount: number) {
     let player = this.players[this.currentPlayerId];
-    player.status = PlayerAction.RAISE;
+    player.status = "RAISE";
     if (amount < this.lastRaiseAmount) return "Invalid Raise!";
     this.lastRaiseAmount = amount;
     this.stake(amount);
     this.moveTurn();
   }
 
-  run() {
-    if (this.status == "IDLE") {
-    }
+  infoForLobby() {
+    const { id, name, type, smallBlind, bigBlind, THRESHOLD, } = this;
+    return {
+      id, name, type, smallBlind, bigBlind, THRESHOLD,
+      players: numberOfPlayers(this.players) + "/6",
+    };
+  }
 
-    setTimeout(() => {
-      this.run();
-    }, 100);
+  info(viewer: string = "") {
+    let data = {
+      id: this.id,
+      name: this.name,
+      type: this.type,
+      smallBlind: this.smallBlind,
+      bigBlind: this.bigBlind,
+      round: this.round,
+      pot: this.pot,
+      minRaiseAmount: this.currentBetAmount - this.lastRaiseAmount,
+      dealerId: this.dealerId,
+      currentPlayerId: this.currentPlayerId,
+      countdown: this.countdown,
+      status: this.status,
+      players: this.players,
+    };
+    data.players = playersInfo(this.players, viewer);
+    return data;
   }
 }

@@ -5,6 +5,7 @@ const randGenerator = new MersenneTwister();
 
 export const COUNT_DOWN = 12;
 export const ANIMATION_TIME = 500;
+export const ROUND_DELAY_TIME = 2000;
 
 export const rand = (n: number) => {
   return randGenerator.random_int() % n;
@@ -27,7 +28,7 @@ export const shuffledCards = () => {
   return cards;
 }
 
-export const getNextPlayerId = (id: number, players: IPlayer[]) => {
+export const nextPlayerId = (id: number, players: IPlayer[]) => {
   do {
     id = (id + 1) % 6;
   } while (!players[id] || !players[id].address);
@@ -43,4 +44,18 @@ export const numberOfPlayers = (players: IPlayer[]) => {
   let count: number = 0;
   for (let i = 0; i < 6; i++) count += Number(isValid(players[i]));
   return count;
+}
+
+export const playersInfo = (players: IPlayer[], viewer: string) => {
+  let result: IPlayer[] = [];
+  for (let player of players) {
+    result.push(playerInfo(player, viewer));
+  }
+  return result;
+}
+
+export const playerInfo = (player: IPlayer, viewer: string) => {
+  let result = JSON.parse(JSON.stringify(player));
+  if (viewer != player.address) result.cards = [];
+  return result;
 }

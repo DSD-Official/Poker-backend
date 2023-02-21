@@ -2,6 +2,7 @@ import { UserDB, IUser } from "../models/User";
 
 export const userService = {
   createUser: async (address: string) => {
+    console.log("Add user", address);
     const user: IUser = {
       address: address,
       name: address,

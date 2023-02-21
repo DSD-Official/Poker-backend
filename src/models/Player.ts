@@ -1,21 +1,20 @@
 import { Socket } from "socket.io";
 
-export enum PlayerAction {
-  NONE = "NONE",
-  SMALL_BLIND = "SMALL_BLIND",
-  BIG_BLIND = "BIG_BLIND",
-  CHECK = "CHECK",
-  CALL = "CALL",
-  RAISE = "RAISE",
-  ALLIN = "ALLIN",
-  FOLD = "FOLD",
-}
+/*
+  NONE,
+  SMALL_BLIND,
+  BIG_BLIND,
+  CHECK,
+  CALL,
+  RAISE,
+  ALLIN,
+  FOLD,
+*/
 
 export interface IPlayer {
   address: string,
   stack: number,
   betAmount: number,
-  status?: PlayerAction,
-  socket: Socket;
+  status: string,
   cards?: number[],
 }
