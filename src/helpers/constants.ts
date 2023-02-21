@@ -1,1 +1,1 @@
-export const COOLDOWN = 12;
+export const COUNT_DOWN = 12;

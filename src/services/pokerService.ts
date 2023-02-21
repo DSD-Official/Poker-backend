@@ -2,7 +2,6 @@ import { Server, Socket } from "socket.io";
 
 import { Table } from "../models/Table";
 import { IUser } from "../models/User";
-import { IPlayer } from "../models/Player";
 import { userService } from "./userService";
 import { logger } from "../helpers";
 
@@ -28,10 +27,11 @@ export default class PokerService {
       socket.on("takeSeat", (data) => this.takeSeat(socket, data));
       socket.on("watchTable", (data) => this.watchTable(socket, data));
       socket.on("leaveTable", (data) => this.leaveTable(socket, data));
-      socket.on("bet", (data) => this.bet(socket, data));
       socket.on("fold", (data) => this.fold(socket, data));
       socket.on("call", (data) => this.call(socket, data));
       socket.on("raise", (data) => this.raise(socket, data));
+      socket.on("check", (data) => this.check(socket, data));
+      socket.on("allIn", (data) => this.allIn(socket, data));
     });
   }
 
@@ -46,10 +46,6 @@ export default class PokerService {
       balance: user.balance,
       avatarUrl: user.avatarUrl,
     })
-  }
-
-  sendTablesDetail = (socket: Socket) => {
-    this.sendMessage(socket, "allTables", this.tables);
   }
 
   createTable = async (socket: Socket, data: any) => {
@@ -88,30 +84,34 @@ export default class PokerService {
 
   takeSeat = async (socket: Socket, data: any) => {
     const { address, tableId, position, startChipAmount } = data;
-    if (!data.address || !data.tableId || data.tableId >= this.tables.length || data.position >= 6) {
+    if (!address || !tableId || tableId >= this.tables.length || position >= 6) {
       this.sendMessage(socket, "error", "Invalid data");
     }
 
-    const table = this.tables[data.tableId];
-    const user = await userService.getUser(data.address);
-    if (user.balance < table.THRESHOLD) {
+    const table = this.tables[tableId];
+    const user = await userService.getUser(address);
+    if (user.balance < startChipAmount || startChipAmount < table.THRESHOLD) {
       this.sendMessage(socket, "error", `You need at least ${table.THRESHOLD}chips`);
     }
     user.balance -= table.THRESHOLD;
     userService.updateUser(user);
 
     table.takeSeat({
-      address: data.address,
-      stack: data.startChipAmount,
+      address: address,
+      stack: startChipAmount,
       socket: socket,
+      betAmount: 0,
     }, data.position);
   }
 
   leaveTable = async (socket: Socket, data: any) => {
   }
 
+  sendTablesDetail = (socket: Socket) => {
+  }
+
   // table actions
-  bet = async (socket: Socket, data: any) => {
+  check = async (socket: Socket, data: any) => {
   }
 
   fold = async (socket: Socket, data: any) => {
@@ -121,6 +121,9 @@ export default class PokerService {
   }
 
   raise = async (socket: Socket, data: any) => {
+  }
+
+  allIn = async (socket: Socket, data: any) => {
   }
 
   sendMessage = (socket: Socket, channel: string, data: any = {}) => {
