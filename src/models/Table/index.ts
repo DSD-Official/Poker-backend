@@ -1,4 +1,4 @@
-import { Socket } from "socket.io";
+import { Socket, Server } from "socket.io";
 import { IPlayer } from "../Player";
 import {
   shuffledCards,
@@ -20,18 +20,20 @@ export enum Round {
 }
 
 export class Table {
+  server!: Server;
+
   id!: number;
   name!: string;
   type!: "NL Texas Hold'em" | "Pot Limit Omaha";
   smallBlind!: number;
   bigBlind!: number;
   players: IPlayer[] = [];
-  THRESHOLD!: number;
+  minBuyIn!: number;
 
   round!: Round;
   pot: number = 0;
-  currentBetAmount: number = 0;
-  lastRaiseAmount: number = 0;
+  currentBet: number = 0;
+  minRaise: number = 0;
   dealerId: number = 0;
   currentPlayerId: number = 0;
   cards: number[] = [];
@@ -39,12 +41,14 @@ export class Table {
   timestamp!: number;
   status: string = "IDLE";
 
-  constructor(id: number, name: string, type: "NL Texas Hold'em" | "Pot Limit Omaha", smallBlind: number, bigBlind: number) {
+  constructor(server: Server, id: number, name: string, type: "NL Texas Hold'em" | "Pot Limit Omaha", smallBlind: number, bigBlind: number) {
+    this.server = server;
     this.id = id;
     this.name = name;
     this.type = type;
     this.smallBlind = smallBlind;
     this.bigBlind = bigBlind;
+    this.minBuyIn = this.bigBlind * 10;
   }
 
   takeSeat(player: IPlayer, position: number) {
@@ -85,6 +89,7 @@ export class Table {
   moveTurn() { // get next turn id
     this.status = String(this.players[this.currentPlayerId].status);
     this.currentPlayerId = nextPlayerId(this.currentPlayerId, this.players);
+
     this.countdown = COUNT_DOWN;
     let isRoundCompleted: boolean = true;
     for (let i = 0; i < 6; i++) {
@@ -115,7 +120,7 @@ export class Table {
   call() {
     let player = this.players[this.currentPlayerId];
     player.status = "CALL";
-    this.stake(this.currentBetAmount - player.betAmount);
+    this.stake(this.currentBet - player.betAmount);
     this.moveTurn();
   }
 
@@ -141,17 +146,17 @@ export class Table {
   raise(amount: number) {
     let player = this.players[this.currentPlayerId];
     player.status = "RAISE";
-    if (amount < this.lastRaiseAmount) return "Invalid Raise!";
-    this.lastRaiseAmount = amount;
+    this.minRaise = amount - this.currentBet;
+    this.currentBet = amount;
     this.stake(amount);
     this.moveTurn();
   }
 
   infoForLobby() {
-    const { id, name, type, smallBlind, bigBlind, THRESHOLD, } = this;
+    const { id, name, type, smallBlind, bigBlind, minBuyIn, } = this;
     return {
-      id, name, type, smallBlind, bigBlind, THRESHOLD,
-      players: numberOfPlayers(this.players) + "/6",
+      id, name, type, smallBlind, bigBlind, minBuyIn,
+      activePlayersCnt: numberOfPlayers(this.players),
     };
   }
 
@@ -164,7 +169,8 @@ export class Table {
       bigBlind: this.bigBlind,
       round: this.round,
       pot: this.pot,
-      minRaiseAmount: this.currentBetAmount - this.lastRaiseAmount,
+      currentBet: this.currentBet,
+      minRaise: this.minRaise,
       dealerId: this.dealerId,
       currentPlayerId: this.currentPlayerId,
       countdown: this.countdown,

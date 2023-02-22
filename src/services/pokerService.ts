@@ -20,6 +20,7 @@ export default class PokerService {
 
   makeSomeTables() {
     this.tables.push(new Table(
+      this.io,
       1,
       "Poker NL I",
       "NL Texas Hold'em",
@@ -27,6 +28,7 @@ export default class PokerService {
       2
     ));
     this.tables.push(new Table(
+      this.io,
       2,
       "Poker NL II",
       "NL Texas Hold'em",
@@ -34,6 +36,7 @@ export default class PokerService {
       10
     ));
     this.tables.push(new Table(
+      this.io,
       3,
       "Poker NL III",
       "NL Texas Hold'em",
@@ -46,11 +49,12 @@ export default class PokerService {
     this.io.on("connection", (socket: Socket) => {
       this.sendMessage(socket, "ping");
 
-      socket.on("pong", (data) => this.newConnection(socket, data));
-      socket.on("lobbyInfo", () => this.sendTablesDetail(socket));
+      socket.on("joinGame", (data) => this.newConnection(socket, data));
+      socket.on("lobbyInfo", () => this.sendMessage(socket, "lobbyInfo", this.lobbyInfo()));
       socket.on("createTable", (data) => this.createTable(socket, data));
       socket.on("takeSeat", (data) => this.takeSeat(socket, data));
-      // socket.on("watchTable", (data) => this.watchTable(socket, data));
+      socket.on("tableInfo", (data) => this.tableInfo(socket, data));
+
       socket.on("leaveTable", (data) => this.leaveTable(socket, data));
       socket.on("fold", (data) => this.fold(socket, data));
       socket.on("call", (data) => this.call(socket, data));
@@ -62,7 +66,7 @@ export default class PokerService {
   }
 
   newConnection = async (socket: Socket, { address }: { address: string }) => {
-    console.log("connection from", address);
+    logger.info("connection from", address);
     if (!address) {
       this.sendMessage(socket, "error", "connect your wallet");
       return;
@@ -75,20 +79,24 @@ export default class PokerService {
       name: user.name,
       balance: user.balance,
       avatarUrl: user.avatarUrl,
-    })
+    });
+    this.sendMessage(socket, "lobbyInfo", this.lobbyInfo());
   }
 
   createTable = async (socket: Socket, data: any) => {
-    const { address, name, type, smallBlind, bigBlind, startChipAmount } = data;
+    logger.info("creating from ", data);
+    const { address, name, type, smallBlind, bigBlind, buyIn } = data;
     const user = await userService.getUser(address);
 
-    if (user.balance < startChipAmount || startChipAmount < bigBlind * 10) {
+    if (user.balance < buyIn || buyIn < bigBlind * 10) {
       this.sendMessage(socket, "error", "Not enough chips to create the table");
       return;
     }
 
     let currentTableId = this.tables.length;
+    logger.info("table created ID:", currentTableId);
     this.tables.push(new Table(
+      this.io,
       currentTableId,
       name,
       type,
@@ -96,50 +104,53 @@ export default class PokerService {
       bigBlind,
     ));
 
-    this.takeSeat(socket, {
+    await this.takeSeat(socket, {
       address,
       tableId: currentTableId,
       position: 0,
-      startChipAmount,
-    })
+      buyIn,
+    });
+    this.broadcastMessage("lobbyInfo", this.lobbyInfo());
   }
 
-  watchTable = async (socket: Socket, data: any) => {
+  tableInfo = async (socket: Socket, data: any) => {
     const { address, tableId } = data;
     if (!address || !tableId || tableId >= this.tables.length) {
       this.sendMessage(socket, "error", "Invalid data");
+      return;
     }
+    this.sendMessage(socket, "tableInfo", this.tables[tableId].info(address));
     socket.join("room-" + tableId);
   }
 
   takeSeat = async (socket: Socket, data: any) => {
-    const { address, tableId, position, startChipAmount } = data;
+    const { address, tableId, position, buyIn } = data;
     if (!address || !tableId || tableId >= this.tables.length || position >= 6) {
       this.sendMessage(socket, "error", "Invalid data");
     }
 
     const table = this.tables[tableId];
     const user = await userService.getUser(address);
-    if (user.balance < startChipAmount || startChipAmount < table.THRESHOLD) {
-      this.sendMessage(socket, "error", `You need at least ${table.THRESHOLD}chips`);
+    if (user.balance < buyIn || buyIn < table.minBuyIn) {
+      this.sendMessage(socket, "error", `You need at least ${table.minBuyIn}chips`);
     }
-    user.balance -= table.THRESHOLD;
+    user.balance -= table.minBuyIn;
     userService.updateUser(user);
 
     table.takeSeat({
       address: address,
-      stack: startChipAmount,
+      stack: buyIn,
       betAmount: 0,
       status: "FOLD",
+      cards: [] as number[],
     }, data.position);
+
+    this.tableInfo(socket, { address, tableId });
   }
 
-  leaveTable = async (socket: Socket, data: any) => {
-  }
-
-  sendTablesDetail = (socket: Socket) => {
+  lobbyInfo = () => {
     let data = this.tables.map(table => table.infoForLobby());
-    this.sendMessage(socket, "lobbyInfo", data);
+    return data;
   }
 
   // table actions
@@ -158,7 +169,14 @@ export default class PokerService {
   allIn = async (socket: Socket, data: any) => {
   }
 
+  leaveTable = async (socket: Socket, data: any) => {
+  }
+
   sendMessage = (socket: Socket, channel: string, data: any = {}) => {
     socket.emit(channel, data);
+  }
+
+  broadcastMessage = (channel: string, data: any = {}) => {
+    this.io.emit(channel, data);
   }
 }
