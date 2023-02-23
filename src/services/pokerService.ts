@@ -86,6 +86,7 @@ export default class PokerService {
   }
 
   createTable = async (socket: Socket, data: any) => {
+    console.log("request to create");
     const { address, name, type, smallBlind, bigBlind, buyIn } = data;
     if (!address || !name || !type || !smallBlind || !bigBlind || !buyIn) {
       this.sendMessage(socket, "error", "Invalid data");
@@ -179,18 +180,23 @@ export default class PokerService {
 
   // table actions
   check = async (socket: Socket, data: any) => {
+    this.tables[data.id].check();
   }
 
   fold = async (socket: Socket, data: any) => {
+    this.tables[data.id].fold();
   }
 
   call = async (socket: Socket, data: any) => {
+    this.tables[data.id].call();
   }
 
   raise = async (socket: Socket, data: any) => {
+    this.tables[data.id].raise(data.amount);
   }
 
   allIn = async (socket: Socket, data: any) => {
+    this.tables[data.id].allIn();
   }
 
   leaveTable = async (socket: Socket, data: any) => {

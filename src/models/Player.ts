@@ -2,11 +2,15 @@
   NONE,
   SMALL_BLIND,
   BIG_BLIND,
+  BET,
   CHECK,
   CALL,
   RAISE,
   ALLIN,
   FOLD,
+
+  LEAVE,
+  JOIN,
 */
 
 export interface IPlayer {

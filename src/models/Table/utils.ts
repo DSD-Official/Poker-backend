@@ -5,8 +5,8 @@ import { userService } from "../../services/userService";
 const randGenerator = new MersenneTwister();
 
 export const COUNT_DOWN = 12;
-export const ANIMATION_TIME = 400;
-export const ROUND_DELAY_TIME = 2000;
+export const ANIMATION_TIME = 500;
+export const ROUND_DELAY_TIME = 1000;
 
 export const rand = (n: number) => {
   return randGenerator.random_int() % n;
@@ -29,21 +29,38 @@ export const shuffledCards = () => {
   return cards;
 }
 
-export const nextPlayerId = (id: number, players: IPlayer[]) => {
+export const nextActivePlayerId = (id: number, players: IPlayer[]) => {
   do {
     id = (id + 1) % 6;
-  } while (!players[id] || !players[id].address);
+  } while (!isActive(players[id]));
   return id;
 }
 
 export const isValid = (player: IPlayer) => {
-  if (player && player.address) return true;
+  if (player && player.address) {
+    if (player.status == "JOIN") return false;
+    return true;
+  }
+  return false;
+}
+
+export const isActive = (player: IPlayer) => {
+  if (player && player.address) {
+    if (player.status != "FOLD" && player.status != "JOIN" && player.status != "LEAVE")
+      return true;
+  }
   return false;
 }
 
 export const numberOfPlayers = (players: IPlayer[]) => {
   let count: number = 0;
   for (let i = 0; i < 6; i++) count += Number(isValid(players[i]));
+  return count;
+}
+
+export const numberOfActivePlayers = (players: IPlayer[]) => {
+  let count: number = 0;
+  for (let i = 0; i < 6; i++) count += Number(isActive(players[i]));
   return count;
 }
 
