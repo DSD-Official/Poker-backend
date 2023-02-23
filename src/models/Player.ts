@@ -14,5 +14,6 @@ export interface IPlayer {
   stack: number,
   betAmount: number,
   status: string,
+  position: number,
   cards: number[],
 }

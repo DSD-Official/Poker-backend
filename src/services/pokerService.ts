@@ -14,14 +14,14 @@ export default class PokerService {
     this.io = io;
     this.buildConnection();
 
-    this.makeSomeTables();
+    // this.makeSomeTables();
     logger.info("Poker game service started");
   }
 
   makeSomeTables() {
     this.tables.push(new Table(
       this.io,
-      1,
+      0,
       "Poker NL I",
       "NL Texas Hold'em",
       1,
@@ -29,7 +29,7 @@ export default class PokerService {
     ));
     this.tables.push(new Table(
       this.io,
-      2,
+      1,
       "Poker NL II",
       "NL Texas Hold'em",
       5,
@@ -37,7 +37,7 @@ export default class PokerService {
     ));
     this.tables.push(new Table(
       this.io,
-      3,
+      2,
       "Poker NL III",
       "NL Texas Hold'em",
       10,
@@ -61,6 +61,8 @@ export default class PokerService {
       socket.on("raise", (data) => this.raise(socket, data));
       socket.on("check", (data) => this.check(socket, data));
       socket.on("allIn", (data) => this.allIn(socket, data));
+
+      socket.on("disconnect", () => console.log("disconnected"));
       // socket.on("disconnect", (data) => logger.info("disconnected"));
     });
   }
@@ -84,8 +86,11 @@ export default class PokerService {
   }
 
   createTable = async (socket: Socket, data: any) => {
-    logger.info("creating from ", data);
     const { address, name, type, smallBlind, bigBlind, buyIn } = data;
+    if (!address || !name || !type || !smallBlind || !bigBlind || !buyIn) {
+      this.sendMessage(socket, "error", "Invalid data");
+      return;
+    }
     const user = await userService.getUser(address);
 
     if (user.balance < buyIn || buyIn < bigBlind * 10) {
@@ -93,6 +98,7 @@ export default class PokerService {
       return;
     }
 
+    logger.info("creating from ", data);
     let currentTableId = this.tables.length;
     logger.info("table created ID:", currentTableId);
     this.tables.push(new Table(
@@ -115,26 +121,41 @@ export default class PokerService {
 
   tableInfo = async (socket: Socket, data: any) => {
     const { address, tableId } = data;
-    if (!address || !tableId || tableId >= this.tables.length) {
+    if (!address || typeof tableId == undefined || tableId >= this.tables.length) {
       this.sendMessage(socket, "error", "Invalid data");
       return;
     }
-    this.sendMessage(socket, "tableInfo", this.tables[tableId].info(address));
+    this.sendMessage(socket, "tableInfo", await this.tables[tableId].info(address));
     socket.join("room-" + tableId);
   }
 
   takeSeat = async (socket: Socket, data: any) => {
     const { address, tableId, position, buyIn } = data;
-    if (!address || !tableId || tableId >= this.tables.length || position >= 6) {
+    if (
+      !address ||
+      typeof tableId == undefined ||
+      typeof position == undefined ||
+      typeof buyIn == undefined ||
+      !this.tables[tableId] || position >= 6
+    ) {
       this.sendMessage(socket, "error", "Invalid data");
+      return;
     }
-
     const table = this.tables[tableId];
+    if (table?.players[position]?.address) {
+      this.sendMessage(socket, "error", "That seat is already taken by other one");
+      return;
+    }
+    if (table.getPosition(address) >= 0) {
+      this.sendMessage(socket, "error", "You already participated in the table");
+      return;
+    }
     const user = await userService.getUser(address);
     if (user.balance < buyIn || buyIn < table.minBuyIn) {
       this.sendMessage(socket, "error", `You need at least ${table.minBuyIn}chips`);
+      return;
     }
-    user.balance -= table.minBuyIn;
+    user.balance -= buyIn;
     userService.updateUser(user);
 
     table.takeSeat({
@@ -143,7 +164,10 @@ export default class PokerService {
       betAmount: 0,
       status: "FOLD",
       cards: [] as number[],
+      position: data.position,
     }, data.position);
+
+    console.log(`${address} is taking seat at ${position} on table ${tableId}`);
 
     this.tableInfo(socket, { address, tableId });
   }

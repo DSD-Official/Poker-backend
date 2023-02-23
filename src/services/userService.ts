@@ -3,6 +3,7 @@ import { UserDB, IUser } from "../models/User";
 export const userService = {
   createUser: async (address: string) => {
     console.log("Add user", address);
+    if (!address) throw "empty address";
     const user: IUser = {
       address: address,
       name: address,
@@ -33,6 +34,6 @@ export const userService = {
   },
 
   updateUser: async (user: IUser) => {
-    await UserDB.findOneAndUpdate({ address: user.address });
+    await UserDB.findOneAndUpdate({ address: user.address }, user);
   }
 }

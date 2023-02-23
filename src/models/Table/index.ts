@@ -9,6 +9,7 @@ import {
   ROUND_DELAY_TIME,
   numberOfPlayers,
   playersInfo,
+  nullPlayer
 } from "./utils";
 
 export enum Round {
@@ -39,7 +40,7 @@ export class Table {
   cards: number[] = [];
   countdown!: number;
   timestamp!: number;
-  status: string = "IDLE";
+  status: string = "OVER";
 
   constructor(server: Server, id: number, name: string, type: "NL Texas Hold'em" | "Pot Limit Omaha", smallBlind: number, bigBlind: number) {
     this.server = server;
@@ -49,14 +50,20 @@ export class Table {
     this.smallBlind = smallBlind;
     this.bigBlind = bigBlind;
     this.minBuyIn = this.bigBlind * 10;
+    this.round = Round.OVER;
+    this.countdown = 1;
+    for (let i = 0; i < 6; i++) this.players[i] = nullPlayer();
+    this.tick();
   }
 
   takeSeat(player: IPlayer, position: number) {
     this.players[position] = player;
     this.dealerId = position;
+    this.broadcast();
   }
 
   newHand() {
+    console.log("new hand begins!");
     this.cards = shuffledCards();
     for (let i = 0; i < 6; i++) {
       if (isValid(this.players[i])) {
@@ -72,41 +79,39 @@ export class Table {
         this.players[i].status = "NONE";
       }
     }
+    this.status = "PREFLOP";
     this.currentPlayerId = this.dealerId;
     this.countdown = COUNT_DOWN;
+    this.broadcast();
     // small blind
-    this.players[this.currentPlayerId].status = "SMALL_BLIND";
-    this.stake(this.smallBlind);
-    this.moveTurn();
-    // big blind
     setTimeout(() => {
-      this.players[this.currentPlayerId].status = "BIG_BLIND";
-      this.stake(this.bigBlind);
-      this.moveTurn();
-    }, ANIMATION_TIME);
+      this.smallBlindFn();
+      // big blind
+      setTimeout(this.bigBlindFn, ANIMATION_TIME);
+    }, ANIMATION_TIME * numberOfPlayers(this.players));
   }
 
   moveTurn() { // get next turn id
-    this.status = String(this.players[this.currentPlayerId].status);
     this.currentPlayerId = nextPlayerId(this.currentPlayerId, this.players);
 
     this.countdown = COUNT_DOWN;
-    let isRoundCompleted: boolean = true;
-    for (let i = 0; i < 6; i++) {
-      if (isValid(this.players[i])) {
-        if (this.players[i].status != "CALL" && this.players[i].status != "CHECK")
-          isRoundCompleted = false;
-      }
-    }
-    if (isRoundCompleted) {
-      this.round = (this.round + 1) % 5;
-      for (let i = 0; i < 6; i++) {
-        if (isValid(this.players[i])) {
-        }
-      }
-      setTimeout(() => {
-      }, ROUND_DELAY_TIME);
-    }
+    // let isRoundCompleted: boolean = true;
+    // for (let i = 0; i < 6; i++) {
+    //   if (isValid(this.players[i])) {
+    //     if (this.players[i].status != "CALL" && this.players[i].status != "CHECK")
+    //       isRoundCompleted = false;
+    //   }
+    // }
+    // if (isRoundCompleted) {
+    //   this.round = (this.round + 1) % 5;
+    //   for (let i = 0; i < 6; i++) {
+    //     if (isValid(this.players[i])) {
+    //       if (this.players[i].status != "FOLD") this.players[i].status = "NONE";
+    //     }
+    //   }
+    //   setTimeout(() => {
+    //   }, ROUND_DELAY_TIME);
+    // }
   }
 
   stake(amount: number) {
@@ -117,10 +122,30 @@ export class Table {
     if (!player.stack) player.status = "ALLIN";
   }
 
+  smallBlindFn() {
+    this.status = "SMALL_BLIND";
+    this.players[this.currentPlayerId].status = "SMALL_BLIND";
+    this.stake(this.smallBlind);
+    this.broadcast();
+    this.moveTurn();
+  }
+
+  bigBlindFn() {
+    this.status = "BIG_BLIND";
+    this.players[this.currentPlayerId].status = "BIG_BLIND";
+    this.stake(this.bigBlind);
+    this.broadcast();
+    this.moveTurn();
+  }
+
   call() {
     let player = this.players[this.currentPlayerId];
     player.status = "CALL";
     this.stake(this.currentBet - player.betAmount);
+    // const tableIo = this.server.to("room-" + this.id);
+    // tableIo.emit("call", {
+    //   playerId: this.currentPlayerId,
+    // })
     this.moveTurn();
   }
 
@@ -160,7 +185,7 @@ export class Table {
     };
   }
 
-  info(viewer: string = "") {
+  info = async (viewer: string = "") => {
     let data = {
       id: this.id,
       name: this.name,
@@ -177,7 +202,43 @@ export class Table {
       status: this.status,
       players: this.players,
     };
-    data.players = playersInfo(this.players, viewer);
+    data.players = await playersInfo(this.players, viewer);
     return data;
+  }
+
+  getPosition = (address: string) => {
+    for (let i = 0; i < 6; i++)
+      if (this.players[i].address == address) return i;
+    return -1;
+  }
+
+  tick = async () => {
+    this.countdown--;
+    if (this.countdown <= 0) {
+      switch (this.status) {
+        case "PREFLOP":
+        case "FLOP":
+        case "TURN":
+        case "RIVER":
+          this.fold();
+          break;
+        case "OVER":
+          if (numberOfPlayers(this.players) > 1) {
+            this.newHand();
+          } else this.countdown = 1;
+          break;
+        case "IDLE":
+          this.fold();
+          break;
+      }
+    }
+    setTimeout(this.tick, 1000);
+  }
+
+  broadcast(channel: string = "") {
+    const tableIo = this.server.to("room-" + this.id);
+    this.info().then((data) => {
+      tableIo.emit("tableInfo", data);
+    });
   }
 }

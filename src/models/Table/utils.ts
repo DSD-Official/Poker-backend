@@ -1,10 +1,11 @@
 import MersenneTwister from "mersenne-twister";
 import { IPlayer } from "../Player";
+import { userService } from "../../services/userService";
 
 const randGenerator = new MersenneTwister();
 
 export const COUNT_DOWN = 12;
-export const ANIMATION_TIME = 500;
+export const ANIMATION_TIME = 400;
 export const ROUND_DELAY_TIME = 2000;
 
 export const rand = (n: number) => {
@@ -46,16 +47,31 @@ export const numberOfPlayers = (players: IPlayer[]) => {
   return count;
 }
 
-export const playersInfo = (players: IPlayer[], viewer: string) => {
+export const playersInfo = async (players: IPlayer[], viewer: string) => {
   let result: IPlayer[] = [];
   for (let player of players) {
-    result.push(playerInfo(player, viewer));
+    result.push(await playerInfo(player, viewer));
   }
   return result;
 }
 
-export const playerInfo = (player: IPlayer, viewer: string) => {
+export const playerInfo = async (player: IPlayer, viewer: string) => {
+  if (!player.address) return player;
   let result = JSON.parse(JSON.stringify(player));
   if (viewer != player.address) result.cards = [];
+  const user = await userService.getUser(player.address);
+  result.avatarUrl = user.avatarUrl;
+  result.name = user.name;
   return result;
+}
+
+export const nullPlayer = () => {
+  return {
+    address: "",
+    stack: 0,
+    betAmount: 0,
+    position: -1,
+    status: "",
+    cards: [],
+  }
 }
