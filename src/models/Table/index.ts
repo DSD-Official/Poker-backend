@@ -7,12 +7,12 @@ import {
   isValid,
   isActive,
   COUNT_DOWN,
-  ANIMATION_TIME,
-  ROUND_DELAY_TIME,
+  ANIMATION_DELAY_TIME,
   numberOfPlayers,
   playersInfo,
   nullPlayer,
   numberOfActivePlayers,
+  numbersToCards,
 } from "./utils";
 
 export enum Round {
@@ -46,6 +46,8 @@ export class Table {
   timestamp!: number;
   status: string = "OVER";
   isLockup: boolean = false;
+  leaveList: number[] = [];
+  plusBet: number = 0; // for last action (currentBet - player.betAmount)
 
   constructor(server: Server, id: number, name: string, type: "NL Texas Hold'em" | "Pot Limit Omaha", smallBlind: number, bigBlind: number) {
     this.server = server;
@@ -62,9 +64,11 @@ export class Table {
   }
 
   takeSeat(player: IPlayer, position: number) {
+    player.status = "JOIN";
     this.players[position] = player;
     this.dealerId = position;
     this.broadcast();
+    if (numberOfPlayers(this.players) > 1 && this.status == "OVER") this.newHand();
   }
 
   newHand() {
@@ -94,19 +98,19 @@ export class Table {
     let cnt = 0;
     for (let i = 0; i < 6; i++) {
       if (isActive(this.players[i])) {
-        if (this.players[i].betAmount != this.currentBet && this.players[i].status != "ALLIN")
-          return "RUNNING";
-        cnt++;
+        cnt += Number(this.players[i].status == "ALLIN");
       }
     }
     if (cnt < 2) return "LOCKUP";
+    cnt = 0;
     for (let i = 0; i < 6; i++) {
       if (isActive(this.players[i])) {
-        if (this.players[i].status != "CHECK")
+        if (this.players[i].betAmount != this.currentBet && this.players[i].status != "ALLIN")
           return "RUNNING";
+        cnt += Number(this.players[i].status == "CHECK");
       }
     }
-    return "ENDED";
+    return cnt ? "ENDED" : "RUNNING";
   }
 
   moveTurn() {
@@ -114,10 +118,8 @@ export class Table {
     this.broadcast();
     setTimeout(() => {
       if (!numberOfActivePlayers(this.players)) console.log("what a bug on", this.id);
-      this.currentPlayerId = nextActivePlayerId(this.currentPlayerId, this.players);
 
       if (numberOfActivePlayers(this.players) <= 1) { // win the pot uncontested
-        if (!numberOfActivePlayers(this.players)) console.log("what a bug on", this.id);
         this.over();
         return;
       }
@@ -152,26 +154,30 @@ export class Table {
           this.isLockup = true;
           setTimeout(() => {
             this.moveTurn();
-          }, ROUND_DELAY_TIME);
+          }, ANIMATION_DELAY_TIME);
         }
       }
-    }, 1000);
+      else {
+        this.status = "IDLE";
+        this.currentPlayerId = nextActivePlayerId(this.currentPlayerId, this.players);
+        if (!this.status.includes("BLIND")) this.broadcast();
+      }
+    }, ANIMATION_DELAY_TIME);
   }
 
   preflop() {
     this.round = Round.PREFLOP;
     this.countdown = COUNT_DOWN;
     this.status = "PREFLOP";
-    this.currentPlayerId = nextActivePlayerId(this.dealerId, this.players);
     this.countdown = COUNT_DOWN;
     this.broadcast();
     // small blind
     setTimeout(() => {
+      this.currentPlayerId = nextActivePlayerId(this.dealerId, this.players);
       this.smallBlindFn();
       // big blind
-      setTimeout(() => { this.bigBlindFn() }, 1000);
-      // }, ANIMATION_TIME * numberOfPlayers(this.players));
-    }, ANIMATION_TIME * 2 * numberOfPlayers(this.players));
+      setTimeout(() => { this.bigBlindFn() }, ANIMATION_DELAY_TIME);
+    }, ANIMATION_DELAY_TIME * numberOfPlayers(this.players));
   }
 
   flop() {
@@ -195,7 +201,41 @@ export class Table {
   }
 
   over() {
-
+    let players = this.players;
+    let earnings = [0, 0, 0, 0, 0, 0];
+    while (numberOfActivePlayers(players)) {
+      let hands = [], arr = [];
+      for (let i = 0; i < 6; i++) {
+        if (isActive(players[i])) {
+          hands[i] = Hand.resolve(
+            numbersToCards(players[i].cards.concat(this.communityCards)));
+          arr.push(hands[i]);
+        }
+      }
+      let winnners = Hand.winners(arr);
+      let order = [];
+      for (let i = 0; i < 6; i++) {
+        if (winnners.includes(hands[i])) order.push(i);
+      }
+      order.sort((a, b) => players[a].betAmount - players[b].betAmount);
+      for (let cur of order) {
+        let prize = 0, curAmount = players[cur].betAmount;
+        for (let i = 0; i < 6; i++) {
+          prize += Math.min(curAmount, players[i].betAmount);
+          players[i].betAmount -= Math.min(curAmount, players[i].betAmount);
+        }
+        order.forEach(i => {
+          let v = Math.floor(prize / order.length);
+          players[i].stack += v;
+          earnings[i] += v;
+        })
+        players[cur].status = "FOLD";
+      }
+    }
+    this.status = "OVER";
+    this.broadcast();
+    setTimeout(() => {
+    });
   }
 
   stake(amount: number) {
@@ -204,12 +244,13 @@ export class Table {
     player.stack -= amount;
     player.betAmount += amount;
     this.pot += amount;
+    this.plusBet = amount;
     if (!player.stack) player.status = "ALLIN";
   }
 
   smallBlindFn() {
     console.log("small blind on ", this.id);
-    this.status = "BET";
+    this.status = "SMALL_BLIND";
     this.players[this.currentPlayerId].status = "SMALL_BLIND";
     this.stake(this.smallBlind);
     this.moveTurn();
@@ -217,15 +258,16 @@ export class Table {
 
   bigBlindFn() {
     console.log("big blind on ", this.id);
-    this.status = "BET";
+    this.status = "BIG_BLIND";
     this.players[this.currentPlayerId].status = "BIG_BLIND";
+    this.currentBet = this.bigBlind;
     this.stake(this.bigBlind);
     this.moveTurn();
   }
 
   call() {
     console.log("call on", this.id);
-    this.status = "BET";
+    this.status = "CALL";
     let player = this.players[this.currentPlayerId];
     player.status = "CALL";
     this.stake(this.currentBet - player.betAmount);
@@ -258,7 +300,7 @@ export class Table {
   }
 
   raise(amount: number) {
-    this.status = "BET";
+    this.status = "RAISE";
     let player = this.players[this.currentPlayerId];
     player.status = "RAISE";
     this.minRaise = amount - this.currentBet;
@@ -290,10 +332,18 @@ export class Table {
       currentPlayerId: this.currentPlayerId,
       countdown: this.countdown,
       status: this.status,
-      players: this.players,
       communityCards: this.communityCards,
+      plusBet: this.plusBet,
+      players: this.players,
     };
+    if (data.status.includes("BLIND") || data.status == "CALL" || data.status == "RAISE" || data.status == "ALLIN") {
+      data.status = "BET";
+    }
     data.players = await playersInfo(this.players, viewer);
+    data.players.forEach((player, index) => {
+      if (index != this.currentPlayerId) player.status = "IDLE";
+      else player.status = data.status;
+    })
     return data;
   }
 
@@ -314,9 +364,6 @@ export class Table {
           console.log("tick error while community action");
           break;
         case "OVER":
-          if (numberOfPlayers(this.players) > 1) {
-            this.newHand();
-          } else this.countdown = 2;
           break;
         case "IDLE":
           // this.fold();
@@ -327,6 +374,8 @@ export class Table {
   }
 
   broadcast(channel: string = "") {
+    console.log("broadcast on", this.id);
+    console.log(this.status, this.currentPlayerId);
     const tableIo = this.server.to("room-" + this.id);
     this.info().then((data) => {
       tableIo.emit("tableInfo", data);

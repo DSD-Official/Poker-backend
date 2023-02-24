@@ -4,9 +4,8 @@ import { userService } from "../../services/userService";
 
 const randGenerator = new MersenneTwister();
 
-export const COUNT_DOWN = 12;
-export const ANIMATION_TIME = 500;
-export const ROUND_DELAY_TIME = 1000;
+export const COUNT_DOWN = 1200;
+export const ANIMATION_DELAY_TIME = 10000;
 
 export const rand = (n: number) => {
   return randGenerator.random_int() % n;
@@ -38,7 +37,7 @@ export const nextActivePlayerId = (id: number, players: IPlayer[]) => {
 
 export const isValid = (player: IPlayer) => {
   if (player && player.address) {
-    if (player.status == "JOIN") return false;
+    if (player.status == "LEAVE") return false;
     return true;
   }
   return false;
@@ -92,3 +91,19 @@ export const nullPlayer = () => {
     cards: [],
   }
 }
+
+export const numbersToCards = (nums: number[]) => {
+  return nums.map((cardVal) => {
+    const suit = ["d", "c", "h", "s"][Math.floor(cardVal / 13)];
+    cardVal %= 13;
+    let val = `${cardVal + 2}`;
+    switch (cardVal) {
+      case 8: val = 'T'; break;
+      case 9: val = 'J'; break;
+      case 10: val = 'Q'; break;
+      case 11: val = 'K'; break;
+      case 12: val = 'A'; break;
+    }
+    return val + suit;
+  })
+};
