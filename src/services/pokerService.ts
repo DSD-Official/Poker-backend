@@ -7,8 +7,9 @@ import { logger } from "../helpers";
 
 export default class PokerService {
   private io!: Server;
-  public tables: Table[] = [];
+  public tables: { [key: string]: Table } = {};
   public users: Record<string, IUser> = {};
+  public tableCounter: number = 0;
 
   constructor(io: Server) {
     this.io = io;
@@ -16,33 +17,6 @@ export default class PokerService {
 
     // this.makeSomeTables();
     logger.info("Poker game service started");
-  }
-
-  makeSomeTables() {
-    this.tables.push(new Table(
-      this.io,
-      0,
-      "Poker NL I",
-      "NL Texas Hold'em",
-      1,
-      2
-    ));
-    this.tables.push(new Table(
-      this.io,
-      1,
-      "Poker NL II",
-      "NL Texas Hold'em",
-      5,
-      10
-    ));
-    this.tables.push(new Table(
-      this.io,
-      2,
-      "Poker NL III",
-      "NL Texas Hold'em",
-      10,
-      20
-    ));
   }
 
   buildConnection = () => {
@@ -62,7 +36,7 @@ export default class PokerService {
       socket.on("check", (data) => this.check(socket, data));
       socket.on("allIn", (data) => this.allIn(socket, data));
 
-      socket.on("disconnect", () => console.log("disconnected"));
+      socket.on("disconnect", () => this.disconnect(socket));
       // socket.on("disconnect", (data) => logger.info("disconnected"));
     });
   }
@@ -100,23 +74,23 @@ export default class PokerService {
     }
 
     logger.info("creating from ", data);
-    let currentTableId = this.tables.length;
-    logger.info("table created ID:", currentTableId);
-    this.tables.push(new Table(
+    logger.info("table created ID:", this.tableCounter);
+    this.tables[this.tableCounter] = new Table(
       this.io,
-      currentTableId,
+      Number(this.tableCounter),
       name,
       type,
       smallBlind,
       bigBlind,
-    ));
+    );
 
     await this.takeSeat(socket, {
       address,
-      tableId: currentTableId,
+      tableId: this.tableCounter,
       position: 0,
       buyIn,
     });
+    this.tableCounter++;
     this.broadcastMessage("lobbyInfo", this.lobbyInfo());
   }
 
@@ -160,7 +134,8 @@ export default class PokerService {
     userService.updateUser(user);
 
     table.takeSeat({
-      address: address,
+      socket,
+      address,
       stack: buyIn,
       betAmount: 0,
       status: "FOLD",
@@ -174,7 +149,7 @@ export default class PokerService {
   }
 
   lobbyInfo = () => {
-    let data = this.tables.map(table => table.infoForLobby());
+    let data = Object.values(this.tables).map(table => table.infoForLobby());
     return data;
   }
 
@@ -200,6 +175,7 @@ export default class PokerService {
   }
 
   leaveTable = async (socket: Socket, data: any) => {
+    this.tables[data.id].leaveSeat(data.position);
   }
 
   sendMessage = (socket: Socket, channel: string, data: any = {}) => {
@@ -208,5 +184,22 @@ export default class PokerService {
 
   broadcastMessage = (channel: string, data: any = {}) => {
     this.io.emit(channel, data);
+  }
+
+  disconnect = (socket: Socket) => {
+    let shouldUpdate: boolean = false;
+    Object.keys(this.tables).forEach(key => {
+      let table = this.tables[key];
+      let pos = table.getPlayerPosition(socket);
+      if (pos >= 0) table.leaveSeat(pos);
+      if (!table.numberOfPlayers()) { // only one player
+        delete this.tables[key];
+        shouldUpdate = true;
+      }
+    });
+    if (shouldUpdate) {
+      console.log("~~ huhu ~~ I clean the dashboard :)")
+      this.broadcastMessage("lobbyInfo", this.lobbyInfo());
+    }
   }
 }

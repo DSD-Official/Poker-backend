@@ -1,3 +1,4 @@
+import { Socket } from "socket.io";
 /*
   NONE,
   SMALL_BLIND,
@@ -14,6 +15,7 @@
 */
 
 export interface IPlayer {
+  socket?: Socket,
   address: string,
   stack: number,
   betAmount: number,

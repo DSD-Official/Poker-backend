@@ -5,6 +5,7 @@ export interface IUser {
   name?: string,
   balance: number,
   avatarUrl?: string,
+  tables?: number[],
 };
 
 const UserSchema = new Schema({

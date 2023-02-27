@@ -5,7 +5,7 @@ import { userService } from "../../services/userService";
 const randGenerator = new MersenneTwister();
 
 export const COUNT_DOWN = 1200;
-export const ANIMATION_DELAY_TIME = 10000;
+export const ANIMATION_DELAY_TIME = 5500;
 
 export const rand = (n: number) => {
   return randGenerator.random_int() % n;
@@ -37,7 +37,7 @@ export const nextActivePlayerId = (id: number, players: IPlayer[]) => {
 
 export const isValid = (player: IPlayer) => {
   if (player && player.address) {
-    if (player.status == "LEAVE") return false;
+    if (player.status == "DISCONNECT") return false;
     return true;
   }
   return false;
@@ -73,9 +73,10 @@ export const playersInfo = async (players: IPlayer[], viewer: string) => {
 
 export const playerInfo = async (player: IPlayer, viewer: string) => {
   if (!player.address) return player;
-  let result = JSON.parse(JSON.stringify(player));
-  if (viewer != player.address) result.cards = [];
-  const user = await userService.getUser(player.address);
+  const { socket, ...remain } = player;
+  let result = JSON.parse(JSON.stringify(remain));
+  if (viewer != remain.address && viewer != "all") result.cards = []; 
+  const user = await userService.getUser(remain.address);
   result.avatarUrl = user.avatarUrl;
   result.name = user.name;
   return result;
@@ -94,7 +95,7 @@ export const nullPlayer = () => {
 
 export const numbersToCards = (nums: number[]) => {
   return nums.map((cardVal) => {
-    const suit = ["d", "c", "h", "s"][Math.floor(cardVal / 13)];
+    const suit = ["h", "s", "d", "c"][Math.floor(cardVal / 13)];
     cardVal %= 13;
     let val = `${cardVal + 2}`;
     switch (cardVal) {
@@ -107,3 +108,4 @@ export const numbersToCards = (nums: number[]) => {
     return val + suit;
   })
 };
+

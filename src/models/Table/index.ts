@@ -44,10 +44,12 @@ export class Table {
   communityCards: number[] = [];
   countdown!: number;
   timestamp!: number;
-  status: string = "OVER";
+  status: string = "WAIT";
   isLockup: boolean = false;
   leaveList: number[] = [];
   plusBet: number = 0; // for last action (currentBet - player.betAmount)
+  prizes: number[] = [];
+  lastNewPlayerId: number = -1;
 
   constructor(server: Server, id: number, name: string, type: "NL Texas Hold'em" | "Pot Limit Omaha", smallBlind: number, bigBlind: number) {
     this.server = server;
@@ -61,22 +63,40 @@ export class Table {
     this.countdown = 1;
     for (let i = 0; i < 6; i++) this.players[i] = nullPlayer();
     this.tick();
+    this.test();
   }
 
   takeSeat(player: IPlayer, position: number) {
     player.status = "JOIN";
     this.players[position] = player;
-    this.dealerId = position;
+    this.lastNewPlayerId = position;
     this.broadcast();
-    if (numberOfPlayers(this.players) > 1 && this.status == "OVER") this.newHand();
+    if (this.status == "WAIT") this.newHand();
+  }
+
+  leaveSeat(pos: number) {
+    let player = this.players[pos];
+    if (isValid(player)) {
+      player.status = "DISCONNECT";
+    }
+  }
+
+  sitOut() {
   }
 
   newHand() {
+    if (numberOfPlayers(this.players) < 2) {
+      console.log("not enough people to start the game");
+      return;
+    }
     console.log("new hand begins!");
 
+    for (let i = 0; i < 6; i++)
+      if (this.players[i].status == "DISCONNECT") this.players[i] = nullPlayer();
     this.cards = shuffledCards();
     this.pot = 0;
     this.isLockup = false;
+    this.minRaise = this.bigBlind;
     for (let i = 0; i < 6; i++) {
       if (isValid(this.players[i])) {
         this.players[i].cards = [this.cards.pop() ?? 0, this.cards.pop() ?? 0];
@@ -89,7 +109,9 @@ export class Table {
         this.players[i].status = "NONE";
       }
     }
+    if (this.lastNewPlayerId != -1) this.dealerId = this.lastNewPlayerId;
     this.dealerId = nextActivePlayerId(this.dealerId, this.players);
+    this.lastNewPlayerId = -1;
 
     this.preflop();
   }
@@ -98,25 +120,26 @@ export class Table {
     let cnt = 0;
     for (let i = 0; i < 6; i++) {
       if (isActive(this.players[i])) {
-        cnt += Number(this.players[i].status == "ALLIN");
+        cnt += Number(this.players[i].status != "ALLIN");
       }
     }
     if (cnt < 2) return "LOCKUP";
-    cnt = 0;
     for (let i = 0; i < 6; i++) {
       if (isActive(this.players[i])) {
         if (this.players[i].betAmount != this.currentBet && this.players[i].status != "ALLIN")
           return "RUNNING";
-        cnt += Number(this.players[i].status == "CHECK");
+        if (this.players[i].status == "NONE")
+          return "RUNNING";
       }
     }
-    return cnt ? "ENDED" : "RUNNING";
+    return "ENDED";
   }
 
   moveTurn() {
     this.countdown = COUNT_DOWN;
     this.broadcast();
     setTimeout(() => {
+      this.currentPlayerId = nextActivePlayerId(this.currentPlayerId, this.players);
       if (!numberOfActivePlayers(this.players)) console.log("what a bug on", this.id);
 
       if (numberOfActivePlayers(this.players) <= 1) { // win the pot uncontested
@@ -155,11 +178,22 @@ export class Table {
           setTimeout(() => {
             this.moveTurn();
           }, ANIMATION_DELAY_TIME);
+        } else {
+          setTimeout(() => {
+            // pot and bet update
+            for (let i = 0; i < 6; i++) {
+              this.pot += this.players[i].betAmount;
+              this.players[i].betAmount = 0;
+            }
+            this.minRaise = this.bigBlind;
+            this.status = "IDLE";
+            this.currentPlayerId = nextActivePlayerId(this.dealerId, this.players);
+            this.broadcast();
+          }, ANIMATION_DELAY_TIME);
         }
       }
       else {
         this.status = "IDLE";
-        this.currentPlayerId = nextActivePlayerId(this.currentPlayerId, this.players);
         if (!this.status.includes("BLIND")) this.broadcast();
       }
     }, ANIMATION_DELAY_TIME);
@@ -177,7 +211,7 @@ export class Table {
       this.smallBlindFn();
       // big blind
       setTimeout(() => { this.bigBlindFn() }, ANIMATION_DELAY_TIME);
-    }, ANIMATION_DELAY_TIME * numberOfPlayers(this.players));
+    }, ANIMATION_DELAY_TIME * numberOfActivePlayers(this.players));
   }
 
   flop() {
@@ -207,7 +241,7 @@ export class Table {
       let hands = [], arr = [];
       for (let i = 0; i < 6; i++) {
         if (isActive(players[i])) {
-          hands[i] = Hand.resolve(
+          hands[i] = Hand.solve(
             numbersToCards(players[i].cards.concat(this.communityCards)));
           arr.push(hands[i]);
         }
@@ -235,7 +269,14 @@ export class Table {
     this.status = "OVER";
     this.broadcast();
     setTimeout(() => {
-    });
+      this.status = "PRIZE";
+      this.prizes = earnings;
+      this.broadcast();
+
+      setTimeout(() => {
+        this.newHand();
+      }, ANIMATION_DELAY_TIME);
+    }, ANIMATION_DELAY_TIME);
   }
 
   stake(amount: number) {
@@ -243,7 +284,6 @@ export class Table {
     amount = Math.min(amount, player.stack);
     player.stack -= amount;
     player.betAmount += amount;
-    this.pot += amount;
     this.plusBet = amount;
     if (!player.stack) player.status = "ALLIN";
   }
@@ -263,6 +303,10 @@ export class Table {
     this.currentBet = this.bigBlind;
     this.stake(this.bigBlind);
     this.moveTurn();
+    setTimeout(() => {
+      for (let i = 0; i < 6; i++)
+        if (isActive(this.players[i])) this.players[i].status = "NONE";
+    }, ANIMATION_DELAY_TIME);
   }
 
   call() {
@@ -300,11 +344,12 @@ export class Table {
   }
 
   raise(amount: number) {
+    console.log(amount, "--> raise");
     this.status = "RAISE";
     let player = this.players[this.currentPlayerId];
     player.status = "RAISE";
-    this.minRaise = amount - this.currentBet;
-    this.currentBet = amount;
+    this.minRaise = player.betAmount + amount - this.currentBet;
+    this.currentBet = amount + player.betAmount;
     this.stake(amount);
     this.moveTurn();
   }
@@ -336,13 +381,16 @@ export class Table {
       plusBet: this.plusBet,
       players: this.players,
     };
-    if (data.status.includes("BLIND") || data.status == "CALL" || data.status == "RAISE" || data.status == "ALLIN") {
-      data.status = "BET";
-    }
-    data.players = await playersInfo(this.players, viewer);
+    // if (data.status.includes("BLIND") || data.status == "CALL" || data.status == "RAISE" || data.status == "ALLIN") {
+    //   data.status = "BET";
+    // }
+    data.players = await playersInfo(this.players, this.round == Round.OVER ? "all" : viewer);
     data.players.forEach((player, index) => {
-      if (index != this.currentPlayerId) player.status = "IDLE";
-      else player.status = data.status;
+      if (isValid(player)) {
+        if (index != this.currentPlayerId) player.status = "IDLE";
+        else if (this.status == "IDLE") player.status = "ACTIVE";
+        if (player.status.includes("BLIND") || player.status == "CALL" || player.status == "RAISE" || player.status == "ALLIN") player.status = "BET";
+      }
     })
     return data;
   }
@@ -374,11 +422,39 @@ export class Table {
   }
 
   broadcast(channel: string = "") {
-    console.log("broadcast on", this.id);
+    // console.log("-- broadcast on", this.id);
     console.log(this.status, this.currentPlayerId);
-    const tableIo = this.server.to("room-" + this.id);
-    this.info().then((data) => {
-      tableIo.emit("tableInfo", data);
+    console.log(this.players.map(player => player.status));
+
+    this.server.in("room-" + this.id).fetchSockets().then((sockets) => {
+      for (let socket of sockets) {
+        let viewer = "";
+        this.players.forEach(player => {
+          if (player.socket?.id == socket.id) viewer = player.address;
+        });
+        this.info(viewer).then((data) => {
+          socket.emit("tableInfo", data);
+        });
+      }
     });
   }
+
+  getPlayerPosition(socket: Socket) {
+    for (let i = 0; i < 6; i++) {
+      if (this.players[i].socket?.id == socket.id)
+        return i;
+    }
+    return -1;
+  }
+
+  isSocketOfPlayer(socket: Socket) {
+    return this.getPlayerPosition(socket) > -1;
+  }
+
+  numberOfPlayers() {
+    return numberOfPlayers(this.players);
+  }
+  test() {
+  }
+
 }
