@@ -19,7 +19,9 @@ export interface IPlayer {
   address: string,
   stack: number,
   betAmount: number,
+  totalBet: number,
   status: string,
   position: number,
   cards: number[],
+  prize?: number,
 }

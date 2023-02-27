@@ -138,6 +138,7 @@ export default class PokerService {
       address,
       stack: buyIn,
       betAmount: 0,
+      totalBet: 0,
       status: "FOLD",
       cards: [] as number[],
       position: data.position,

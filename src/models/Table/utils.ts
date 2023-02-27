@@ -4,8 +4,8 @@ import { userService } from "../../services/userService";
 
 const randGenerator = new MersenneTwister();
 
-export const COUNT_DOWN = 1200;
-export const ANIMATION_DELAY_TIME = 5500;
+export const COUNT_DOWN = 20;
+export const ANIMATION_DELAY_TIME = 1100;
 
 export const rand = (n: number) => {
   return randGenerator.random_int() % n;
@@ -18,7 +18,7 @@ export const setSeed = (seed?: number) => {
 
 export const shuffledCards = () => {
   let cards: number[] = [];
-  for (let i = 0; i < 52; i++) cards[i] = i + 1;
+  for (let i = 0; i < 52; i++) cards[i] = i;
   for (let i = 51; i >= 0; i--) {
     let j = rand(i + 1);
     let tmp = cards[i];
@@ -75,7 +75,7 @@ export const playerInfo = async (player: IPlayer, viewer: string) => {
   if (!player.address) return player;
   const { socket, ...remain } = player;
   let result = JSON.parse(JSON.stringify(remain));
-  if (viewer != remain.address && viewer != "all") result.cards = []; 
+  if (viewer != remain.address && viewer != "all") result.cards = [];
   const user = await userService.getUser(remain.address);
   result.avatarUrl = user.avatarUrl;
   result.name = user.name;
@@ -87,6 +87,7 @@ export const nullPlayer = () => {
     address: "",
     stack: 0,
     betAmount: 0,
+    totalBet: 0,
     position: -1,
     status: "",
     cards: [],
@@ -97,13 +98,13 @@ export const numbersToCards = (nums: number[]) => {
   return nums.map((cardVal) => {
     const suit = ["h", "s", "d", "c"][Math.floor(cardVal / 13)];
     cardVal %= 13;
-    let val = `${cardVal + 2}`;
+    let val = `${cardVal + 1}`; // A -> 1
     switch (cardVal) {
-      case 8: val = 'T'; break;
-      case 9: val = 'J'; break;
-      case 10: val = 'Q'; break;
-      case 11: val = 'K'; break;
-      case 12: val = 'A'; break;
+      case 1: val = 'A'; break;
+      case 10: val = 'T'; break;
+      case 11: val = 'J'; break;
+      case 12: val = 'Q'; break;
+      case 13: val = 'K'; break;
     }
     return val + suit;
   })
