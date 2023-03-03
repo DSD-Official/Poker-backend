@@ -4,7 +4,7 @@ import { userService } from "../../services/userService";
 
 const randGenerator = new MersenneTwister();
 
-export const COUNT_DOWN = 20;
+export const COUNT_DOWN = 12;
 export const ANIMATION_DELAY_TIME = 1100;
 
 export const rand = (n: number) => {
@@ -100,11 +100,11 @@ export const numbersToCards = (nums: number[]) => {
     cardVal %= 13;
     let val = `${cardVal + 1}`; // A -> 1
     switch (cardVal) {
-      case 1: val = 'A'; break;
-      case 10: val = 'T'; break;
-      case 11: val = 'J'; break;
-      case 12: val = 'Q'; break;
-      case 13: val = 'K'; break;
+      case 0: val = 'A'; break;
+      case 9: val = 'T'; break;
+      case 10: val = 'J'; break;
+      case 11: val = 'Q'; break;
+      case 12: val = 'K'; break;
     }
     return val + suit;
   })
