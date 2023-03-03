@@ -254,7 +254,7 @@ export class Table {
   final() {
     this.status = "FINAL";
     this.broadcast();
-    setTimeout(() => { this.over() }, ANIMATION_DELAY_TIME);
+    setTimeout(() => { this.over() }, ANIMATION_DELAY_TIME * 3);
   }
 
   over() {
@@ -263,6 +263,7 @@ export class Table {
     this.updatePlayers();
     for (let i = 0; i < 6; i++)
       console.log(players[i].totalBet);
+    let oldStatus = players.map(player => player.status);
     while (numberOfActivePlayers(players)) {
       let hands = [], arr = [];
       for (let i = 0; i < 6; i++) {
@@ -299,6 +300,7 @@ export class Table {
         order.pop();
       }
     }
+    for (let i = 0; i < 6; i++) players[i].status = oldStatus[i];
     console.log("----------------- END --------------------");
     console.log(players.map(player => player.stack));
     this.status = "OVER";
